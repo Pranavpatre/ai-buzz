@@ -29,7 +29,7 @@ const DigestCard = ({
 
   return (
     <article
-      className="group rounded-lg border border-border bg-surface-elevated p-5 shadow-card transition-shadow hover:shadow-elevated animate-fade-in"
+      className="group rounded-lg border border-border bg-surface-elevated p-6 md:p-8 shadow-card transition-shadow hover:shadow-elevated animate-fade-in"
       style={{ animationDelay: "0.05s" }}
     >
       {/* Header */}
