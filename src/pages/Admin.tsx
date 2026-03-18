@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Shield, Plus, Trash2, RefreshCw, Rss, ArrowLeft, Newspaper, Mic, FileText, ExternalLink, Youtube } from "lucide-react";
+import { Shield, Plus, Trash2, RefreshCw, Rss, ArrowLeft, Newspaper, Mic, FileText, Youtube } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
@@ -84,23 +84,47 @@ const Admin = () => {
     fetchDigests();
   }, [fetchFeeds, fetchDigests]);
 
+  const [addingFeed, setAddingFeed] = useState(false);
+
   const handleAddFeed = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!feedName.trim() || !feedUrl.trim() || !user) return;
-    const { error } = await supabase.from("feeds").insert({
-      name: feedName.trim(),
-      url: feedUrl.trim(),
-      type: feedType,
-      user_id: user.id,
-    });
-    if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-      return;
+    setAddingFeed(true);
+
+    try {
+      // Convert YouTube URL to RSS feed URL via edge function
+      const { data: rssData, error: rssError } = await supabase.functions.invoke("youtube-to-rss", {
+        body: { youtubeUrl: feedUrl.trim() },
+      });
+
+      if (rssError || rssData?.error) {
+        toast({ title: "Error", description: rssData?.error || rssError?.message || "Failed to convert YouTube URL", variant: "destructive" });
+        setAddingFeed(false);
+        return;
+      }
+
+      const { error } = await supabase.from("feeds").insert({
+        name: feedName.trim(),
+        url: rssData.rssUrl,
+        type: feedType,
+        user_id: user.id,
+      });
+
+      if (error) {
+        toast({ title: "Error", description: error.message, variant: "destructive" });
+        setAddingFeed(false);
+        return;
+      }
+
+      toast({ title: "Feed added", description: "YouTube channel RSS feed created successfully." });
+      setFeedName("");
+      setFeedUrl("");
+      fetchFeeds();
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setAddingFeed(false);
     }
-    toast({ title: "Feed added" });
-    setFeedName("");
-    setFeedUrl("");
-    fetchFeeds();
   };
 
   const handleDeleteFeed = async (id: string) => {
@@ -206,28 +230,17 @@ const Admin = () => {
               required
             />
             <Input
-              placeholder="RSS URL"
+              placeholder="YouTube channel or video URL"
               value={feedUrl}
               onChange={(e) => setFeedUrl(e.target.value)}
               className="flex-1 min-w-[200px]"
               required
             />
-            <Button type="submit" size="sm" className="gap-1.5">
-              <Plus className="h-4 w-4" /> Add
+            <Button type="submit" size="sm" className="gap-1.5" disabled={addingFeed}>
+              {addingFeed ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+              {addingFeed ? "Adding…" : "Add"}
             </Button>
           </form>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Youtube className="h-3.5 w-3.5" />
-            <span>Need a YouTube RSS feed?</span>
-            <a
-              href="https://rss.app/rss-feed/create-youtube-rss-feed"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-primary hover:underline font-medium"
-            >
-              Create one here <ExternalLink className="h-3 w-3" />
-            </a>
-          </div>
         </section>
 
         {/* Feeds Table */}
