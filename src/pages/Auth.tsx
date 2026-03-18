@@ -21,6 +21,25 @@ const Auth = () => {
     if (!loading && user) navigate("/", { replace: true });
   }, [user, loading, navigate]);
 
+  const [isForgot, setIsForgot] = useState(false);
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      if (error) throw error;
+      toast({ title: "Check your email", description: "We sent you a password reset link." });
+      setIsForgot(false);
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -62,42 +81,72 @@ const Auth = () => {
         </div>
 
         {/* Email Form */}
-        <form onSubmit={handleEmailAuth} className="space-y-4">
-          <Input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-          <Input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            minLength={6}
-          />
-          <Button type="submit" className="w-full gap-2" disabled={isLoading}>
-            {isLoading ? (
-              "Loading…"
-            ) : isSignUp ? (
-              <><Mail className="h-4 w-4" /> Sign Up</>
-            ) : (
-              <><LogIn className="h-4 w-4" /> Sign In</>
-            )}
-          </Button>
-        </form>
+        {isForgot ? (
+          <form onSubmit={handleForgotPassword} className="space-y-4">
+            <Input
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+            <Button type="submit" className="w-full" disabled={isLoading}>
+              {isLoading ? "Sending…" : "Send Reset Link"}
+            </Button>
+            <p className="text-center text-sm text-muted-foreground">
+              <button onClick={() => setIsForgot(false)} className="text-primary hover:underline font-medium">
+                Back to sign in
+              </button>
+            </p>
+          </form>
+        ) : (
+          <>
+            <form onSubmit={handleEmailAuth} className="space-y-4">
+              <Input
+                type="email"
+                placeholder="Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+              <Input
+                type="password"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                minLength={6}
+              />
+              <Button type="submit" className="w-full gap-2" disabled={isLoading}>
+                {isLoading ? (
+                  "Loading…"
+                ) : isSignUp ? (
+                  <><Mail className="h-4 w-4" /> Sign Up</>
+                ) : (
+                  <><LogIn className="h-4 w-4" /> Sign In</>
+                )}
+              </Button>
+            </form>
 
-        <p className="text-center text-sm text-muted-foreground">
-          {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
-          <button
-            onClick={() => setIsSignUp(!isSignUp)}
-            className="text-primary hover:underline font-medium"
-          >
-            {isSignUp ? "Sign in" : "Sign up"}
-          </button>
-        </p>
+            {!isSignUp && (
+              <p className="text-center text-sm">
+                <button onClick={() => setIsForgot(true)} className="text-muted-foreground hover:text-primary hover:underline">
+                  Forgot password?
+                </button>
+              </p>
+            )}
+
+            <p className="text-center text-sm text-muted-foreground">
+              {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
+              <button
+                onClick={() => setIsSignUp(!isSignUp)}
+                className="text-primary hover:underline font-medium"
+              >
+                {isSignUp ? "Sign in" : "Sign up"}
+              </button>
+            </p>
+          </>
+        )}
       </div>
     </div>
   );
