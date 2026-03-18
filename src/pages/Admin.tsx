@@ -84,23 +84,47 @@ const Admin = () => {
     fetchDigests();
   }, [fetchFeeds, fetchDigests]);
 
+  const [addingFeed, setAddingFeed] = useState(false);
+
   const handleAddFeed = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!feedName.trim() || !feedUrl.trim() || !user) return;
-    const { error } = await supabase.from("feeds").insert({
-      name: feedName.trim(),
-      url: feedUrl.trim(),
-      type: feedType,
-      user_id: user.id,
-    });
-    if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-      return;
+    setAddingFeed(true);
+
+    try {
+      // Convert YouTube URL to RSS feed URL via edge function
+      const { data: rssData, error: rssError } = await supabase.functions.invoke("youtube-to-rss", {
+        body: { youtubeUrl: feedUrl.trim() },
+      });
+
+      if (rssError || rssData?.error) {
+        toast({ title: "Error", description: rssData?.error || rssError?.message || "Failed to convert YouTube URL", variant: "destructive" });
+        setAddingFeed(false);
+        return;
+      }
+
+      const { error } = await supabase.from("feeds").insert({
+        name: feedName.trim(),
+        url: rssData.rssUrl,
+        type: feedType,
+        user_id: user.id,
+      });
+
+      if (error) {
+        toast({ title: "Error", description: error.message, variant: "destructive" });
+        setAddingFeed(false);
+        return;
+      }
+
+      toast({ title: "Feed added", description: "YouTube channel RSS feed created successfully." });
+      setFeedName("");
+      setFeedUrl("");
+      fetchFeeds();
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setAddingFeed(false);
     }
-    toast({ title: "Feed added" });
-    setFeedName("");
-    setFeedUrl("");
-    fetchFeeds();
   };
 
   const handleDeleteFeed = async (id: string) => {
