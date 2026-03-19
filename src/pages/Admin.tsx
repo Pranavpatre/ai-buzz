@@ -248,6 +248,74 @@ const Admin = () => {
     }
   };
 
+  const handleScanGmail = async () => {
+    setScanningGmail(true);
+    setGmailResults([]);
+    try {
+      // Sign in with Google to get Gmail access
+      const result = await lovable.auth.signInWithOAuth("google", {
+        redirect_uri: window.location.origin,
+        extraParams: {
+          prompt: "consent",
+          access_type: "offline",
+          scope: "https://www.googleapis.com/auth/gmail.readonly",
+        },
+      });
+
+      if (result.error) {
+        toast({ title: "Google sign-in failed", description: String(result.error), variant: "destructive" });
+        setScanningGmail(false);
+        return;
+      }
+
+      // After redirect, we need the provider token
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      const providerToken = currentSession?.provider_token;
+
+      if (!providerToken) {
+        toast({ title: "No Gmail access", description: "Could not get Gmail access token. Please try again.", variant: "destructive" });
+        setScanningGmail(false);
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke("scan-gmail", {
+        body: { providerToken },
+      });
+
+      if (error) throw error;
+
+      const newsletters = data?.newsletters || [];
+      if (newsletters.length === 0) {
+        toast({ title: "No AI newsletters found", description: "We didn't find any AI-related newsletters in your Gmail." });
+      } else {
+        toast({ title: `Found ${newsletters.length} AI newsletters`, description: "Review and add them below." });
+      }
+      setGmailResults(newsletters);
+    } catch (e: any) {
+      toast({ title: "Gmail scan failed", description: e.message, variant: "destructive" });
+    } finally {
+      setScanningGmail(false);
+    }
+  };
+
+  const handleAddGmailNewsletter = async (newsletter: { name: string; domain: string; rss: string | null }) => {
+    if (!user || !newsletter.rss) return;
+    try {
+      const { error } = await supabase.from("feeds").insert({
+        name: newsletter.name,
+        url: newsletter.rss,
+        type: "newsletter",
+        user_id: user.id,
+      });
+      if (error) throw error;
+      setAddedGmailDomains((prev) => new Set(prev).add(newsletter.domain));
+      toast({ title: "Added", description: `${newsletter.name} added as a newsletter feed.` });
+      fetchFeeds();
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    }
+  };
+
   const TypeIcon = ({ type }: { type: string }) => {
     const opt = typeOptions.find((t) => t.value === type) || typeOptions[0];
     const Icon = opt.icon;
