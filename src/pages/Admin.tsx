@@ -76,6 +76,9 @@ const Admin = () => {
   const [digestLoading, setDigestLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [addingFeed, setAddingFeed] = useState(false);
+  const [scanningGmail, setScanningGmail] = useState(false);
+  const [gmailResults, setGmailResults] = useState<{ name: string; domain: string; rss: string | null; sampleSubject: string }[]>([]);
+  const [addedGmailDomains, setAddedGmailDomains] = useState<Set<string>>(new Set());
 
   const fetchFeeds = useCallback(async () => {
     if (!user) return;
