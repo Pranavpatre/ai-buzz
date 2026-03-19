@@ -298,13 +298,6 @@ const Admin = () => {
               ))}
             </div>
             <div className="flex flex-wrap items-end gap-3">
-              <Input
-                placeholder="Feed name"
-                value={feedName}
-                onChange={(e) => setFeedName(e.target.value)}
-                className="w-48"
-                required
-              />
               <div className="flex-1 min-w-[200px] space-y-1">
                 <Input
                   placeholder={inputConfig.placeholder}
