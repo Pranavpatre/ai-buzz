@@ -11,7 +11,7 @@ const AI_KEYWORDS = [
   "large language model", "llm", "generative ai", "gen ai", "genai",
   "gpt", "chatgpt", "openai", "claude", "anthropic", "gemini", "mistral", "llama",
   "midjourney", "stable diffusion", "dall-e", "dalle", "sora", "copilot",
-  "perplexity", "cursor", "devin", "lovable",
+  "perplexity", "cursor", "devin", "lovable", "windsurf", "replit", "v0",
   "transformer", "diffusion model", "fine-tuning", "fine tuning", "finetuning",
   "prompt engineering", "rag ", "retrieval augmented", "vector database",
   "embedding", "tokenizer", "inference", "training data",
@@ -25,6 +25,18 @@ const AI_KEYWORDS = [
   "ai research", "ai paper", "ai benchmark", "ai model",
   "natural language processing", "nlp", "computer vision",
   "robotics", "humanoid", "autonomous driving", "self-driving",
+  // Product launches & announcements
+  "launching", "launched", "announcing", "announced", "introducing", "introduced",
+  "now available", "rolling out", "just shipped", "new release", "open source",
+  "beta", "early access", "waitlist", "api access",
+  // AI company & product names
+  "dispatch", "artifacts", "projects", "computer use", "model context protocol", "mcp",
+  "o1", "o3", "o4", "gpt-4", "gpt-5", "gpt4", "gpt5",
+  "claude 3", "claude 4", "sonnet", "opus", "haiku",
+  "gemini 2", "gemini 3", "flash", "deepseek", "qwen", "phi-4",
+  "hugging face", "huggingface", "runway", "pika", "kling",
+  "meta ai", "google ai", "microsoft ai", "amazon ai", "apple ai",
+  "cohere", "databricks", "snowflake cortex", "groq",
 ];
 
 function isAIRelated(text: string): boolean {
