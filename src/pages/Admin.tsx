@@ -310,17 +310,19 @@ const Admin = () => {
   };
 
   const handleAddGmailNewsletter = async (newsletter: { name: string; domain: string; rss: string | null }) => {
-    if (!user || !newsletter.rss) return;
+    if (!user) return;
     try {
+      const feedUrl = newsletter.rss || `gmail:${newsletter.domain}`;
       const { error } = await supabase.from("feeds").insert({
         name: newsletter.name,
-        url: newsletter.rss,
+        url: feedUrl,
         type: "newsletter",
         user_id: user.id,
       });
       if (error) throw error;
       setAddedGmailDomains((prev) => new Set(prev).add(newsletter.domain));
-      toast({ title: "Added", description: `${newsletter.name} added as a newsletter feed.` });
+      const source = newsletter.rss ? "RSS feed" : "Gmail (reads emails directly)";
+      toast({ title: "Added", description: `${newsletter.name} added via ${source}.` });
       fetchFeeds();
     } catch (e: any) {
       toast({ title: "Error", description: e.message, variant: "destructive" });
