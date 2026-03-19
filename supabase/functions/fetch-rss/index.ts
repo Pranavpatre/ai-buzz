@@ -117,8 +117,9 @@ serve(async (req) => {
     const allItems: any[] = [];
 
     // Separate feeds by source type
-    const rssFeeds = feeds.filter((f: any) => !f.url.startsWith("x:"));
+    const rssFeeds = feeds.filter((f: any) => !f.url.startsWith("x:") && !f.url.startsWith("gmail:"));
     const xFeeds = feeds.filter((f: any) => f.url.startsWith("x:"));
+    const gmailFeeds = feeds.filter((f: any) => f.url.startsWith("gmail:"));
 
     // Process RSS/YouTube feeds
     for (const feed of rssFeeds) {
