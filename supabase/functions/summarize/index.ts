@@ -101,7 +101,7 @@ Return 3-5 key points. Each heading must be a clear mini-statement, NOT a generi
       .insert({
         user_id: userId,
         feed_id: item.feedId,
-        title: item.title,
+        title: summary.topic || item.title,
         source: item.feedName,
         guest: summary.guest || null,
         guest_bio: summary.guestBio || null,
