@@ -218,12 +218,23 @@ const Admin = () => {
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
-      const { data: rssData, error: rssError } = await supabase.functions.invoke("fetch-rss");
+      // Get provider token for Gmail feeds
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      const providerToken = currentSession?.provider_token || null;
+
+      const { data: rssData, error: rssError } = await supabase.functions.invoke("fetch-rss", {
+        body: { providerToken },
+      });
       if (rssError) throw rssError;
 
       const items = rssData?.items || [];
+      const hasGmailFeeds = rssData?.hasGmailFeeds || false;
+
       if (items.length === 0) {
-        toast({ title: "All caught up!", description: "No new items found." });
+        const msg = hasGmailFeeds && !providerToken
+          ? "No new items found. Gmail newsletters need Google re-auth — click Scan Gmail first."
+          : "No new items found.";
+        toast({ title: "All caught up!", description: msg });
         setIsRefreshing(false);
         return;
       }
@@ -299,17 +310,19 @@ const Admin = () => {
   };
 
   const handleAddGmailNewsletter = async (newsletter: { name: string; domain: string; rss: string | null }) => {
-    if (!user || !newsletter.rss) return;
+    if (!user) return;
     try {
+      const feedUrl = newsletter.rss || `gmail:${newsletter.domain}`;
       const { error } = await supabase.from("feeds").insert({
         name: newsletter.name,
-        url: newsletter.rss,
+        url: feedUrl,
         type: "newsletter",
         user_id: user.id,
       });
       if (error) throw error;
       setAddedGmailDomains((prev) => new Set(prev).add(newsletter.domain));
-      toast({ title: "Added", description: `${newsletter.name} added as a newsletter feed.` });
+      const source = newsletter.rss ? "RSS feed" : "Gmail (reads emails directly)";
+      toast({ title: "Added", description: `${newsletter.name} added via ${source}.` });
       fetchFeeds();
     } catch (e: any) {
       toast({ title: "Error", description: e.message, variant: "destructive" });
@@ -429,19 +442,19 @@ const Admin = () => {
                       </TableCell>
                       <TableCell>
                         {nl.rss ? (
-                          <span className="text-xs text-green-500">Available</span>
+                          <span className="text-xs text-green-500">RSS</span>
                         ) : (
-                          <span className="text-xs text-muted-foreground">Not found</span>
+                          <span className="text-xs text-amber-500">Gmail</span>
                         )}
                       </TableCell>
                       <TableCell>
-                        {nl.rss && !addedGmailDomains.has(nl.domain) ? (
+                        {!addedGmailDomains.has(nl.domain) ? (
                           <Button size="sm" variant="ghost" onClick={() => handleAddGmailNewsletter(nl)} className="h-7 gap-1">
                             <Plus className="h-3 w-3" /> Add
                           </Button>
-                        ) : addedGmailDomains.has(nl.domain) ? (
+                        ) : (
                           <span className="text-xs text-green-500 flex items-center gap-1"><Check className="h-3 w-3" /> Added</span>
-                        ) : null}
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
