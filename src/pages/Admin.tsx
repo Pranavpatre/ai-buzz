@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
-import { Shield, Plus, Trash2, RefreshCw, ArrowLeft, Newspaper, Mic, FileText, Youtube, Twitter, Mail, Check, Download } from "lucide-react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { Shield, Plus, Trash2, RefreshCw, ArrowLeft, Newspaper, Mic, FileText, Youtube, Twitter, Mail, Check, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
@@ -329,28 +329,66 @@ const Admin = () => {
     }
   };
 
-  const handleImportXFollowing = async () => {
-    if (!user) return;
+  const xFileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImportXFollowing = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !user) return;
     setImportingX(true);
     try {
-      toast({ title: "Importing X following list…", description: "Fetching accounts you follow on X." });
-      
-      const { data, error } = await supabase.functions.invoke("fetch-x-following", {
-        body: { username: "pranavpatre" },
-      });
+      const text = await file.text();
+      // following.js starts with "window.YTD.following.part0 = "
+      const jsonStr = text.replace(/^window\.YTD\.following\.part\d+\s*=\s*/, "");
+      const parsed = JSON.parse(jsonStr);
 
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      const handles: string[] = parsed
+        .map((entry: any) => {
+          const link = entry?.following?.userLink || "";
+          const match = link.match(/x\.com\/(.+)/);
+          return match ? match[1] : null;
+        })
+        .filter(Boolean);
 
+      if (handles.length === 0) {
+        toast({ title: "No accounts found", description: "Could not parse any handles from this file.", variant: "destructive" });
+        return;
+      }
+
+      // Get existing feeds to skip duplicates
+      const { data: existingFeeds } = await supabase
+        .from("feeds")
+        .select("url")
+        .eq("user_id", user.id);
+
+      const existingUrls = new Set((existingFeeds || []).map((f: any) => f.url));
+
+      const newFeeds = handles
+        .filter((h) => !existingUrls.has(`x:@${h}`))
+        .map((h) => ({
+          name: `@${h}`,
+          url: `x:@${h}`,
+          type: "news",
+          user_id: user.id,
+        }));
+
+      let imported = 0;
+      for (let i = 0; i < newFeeds.length; i += 50) {
+        const batch = newFeeds.slice(i, i + 50);
+        const { error: insertError } = await supabase.from("feeds").insert(batch);
+        if (!insertError) imported += batch.length;
+      }
+
+      const skipped = handles.length - newFeeds.length;
       toast({
         title: "X import complete!",
-        description: `Imported ${data.imported} new feeds, skipped ${data.skipped} duplicates (${data.total} total following).`,
+        description: `Imported ${imported} new feeds, skipped ${skipped} duplicates (${handles.length} total).`,
       });
       fetchFeeds();
     } catch (e: any) {
       toast({ title: "Import failed", description: e.message, variant: "destructive" });
     } finally {
       setImportingX(false);
+      if (xFileInputRef.current) xFileInputRef.current.value = "";
     }
   };
 
@@ -493,13 +531,22 @@ const Admin = () => {
         <section className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="font-display text-lg text-foreground">Import X Following</h2>
-            <Button variant="outline" size="sm" onClick={handleImportXFollowing} disabled={importingX} className="gap-1.5">
-              {importingX ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-              {importingX ? "Importing…" : "Import from @pranavpatre"}
-            </Button>
+            <div>
+              <input
+                ref={xFileInputRef}
+                type="file"
+                accept=".js,.json"
+                className="hidden"
+                onChange={handleImportXFollowing}
+              />
+              <Button variant="outline" size="sm" onClick={() => xFileInputRef.current?.click()} disabled={importingX} className="gap-1.5">
+                {importingX ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                {importingX ? "Importing…" : "Upload following.js"}
+              </Button>
+            </div>
           </div>
           <p className="text-xs text-muted-foreground">
-            Fetch all accounts you follow on X and add them as news feeds. Duplicates will be skipped automatically.
+            Go to <span className="font-medium">X → Settings → Your Account → Download an archive</span>, then upload the <code className="bg-muted px-1 rounded">data/following.js</code> file from the zip.
           </p>
         </section>
 
