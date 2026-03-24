@@ -337,20 +337,51 @@ const Admin = () => {
     setImportingX(true);
     try {
       const text = await file.text();
-      // following.js starts with "window.YTD.following.part0 = "
       const jsonStr = text.replace(/^window\.YTD\.following\.part\d+\s*=\s*/, "");
       const parsed = JSON.parse(jsonStr);
 
-      const handles: string[] = parsed
+      // Extract user IDs from the file (format: twitter.com/intent/user?user_id=XXX)
+      const userIds: string[] = parsed
         .map((entry: any) => {
           const link = entry?.following?.userLink || "";
-          const match = link.match(/x\.com\/(.+)/);
-          return match ? match[1] : null;
+          const idMatch = link.match(/user_id=(\d+)/);
+          const handleMatch = link.match(/(?:x\.com|twitter\.com)\/([^/?]+)$/);
+          return idMatch ? { type: "id", value: idMatch[1] } : handleMatch ? { type: "handle", value: handleMatch[1] } : null;
         })
         .filter(Boolean);
 
-      if (handles.length === 0) {
-        toast({ title: "No accounts found", description: "Could not parse any handles from this file.", variant: "destructive" });
+      if (userIds.length === 0) {
+        toast({ title: "No accounts found", description: "Could not parse any accounts from this file.", variant: "destructive" });
+        return;
+      }
+
+      // Separate IDs that need resolving from direct handles
+      const idsToResolve = userIds.filter((u: any) => u.type === "id").map((u: any) => u.value);
+      const directHandles = userIds.filter((u: any) => u.type === "handle").map((u: any) => u.value);
+
+      let resolvedHandles: string[] = [...directHandles];
+
+      if (idsToResolve.length > 0) {
+        toast({ title: "Resolving usernames...", description: `Looking up ${idsToResolve.length} user IDs via Twitter API...` });
+
+        const { data: resolveData, error: resolveError } = await supabase.functions.invoke("resolve-x-users", {
+          body: { user_ids: idsToResolve },
+        });
+
+        if (resolveError) throw new Error(`Failed to resolve user IDs: ${resolveError.message}`);
+
+        if (resolveData?.resolved) {
+          resolvedHandles.push(...resolveData.resolved.map((u: any) => u.username));
+        }
+
+        const failedCount = resolveData?.failed?.length || 0;
+        if (failedCount > 0) {
+          console.warn(`Failed to resolve ${failedCount} user IDs`);
+        }
+      }
+
+      if (resolvedHandles.length === 0) {
+        toast({ title: "No accounts resolved", description: "Could not resolve any usernames. Twitter API credits may be depleted.", variant: "destructive" });
         return;
       }
 
@@ -362,7 +393,7 @@ const Admin = () => {
 
       const existingUrls = new Set((existingFeeds || []).map((f: any) => f.url));
 
-      const newFeeds = handles
+      const newFeeds = resolvedHandles
         .filter((h) => !existingUrls.has(`x:@${h}`))
         .map((h) => ({
           name: `@${h}`,
@@ -378,10 +409,11 @@ const Admin = () => {
         if (!insertError) imported += batch.length;
       }
 
-      const skipped = handles.length - newFeeds.length;
+      const skipped = resolvedHandles.length - newFeeds.length;
+      const failedCount = idsToResolve.length - (resolvedHandles.length - directHandles.length);
       toast({
         title: "X import complete!",
-        description: `Imported ${imported} new feeds, skipped ${skipped} duplicates (${handles.length} total).`,
+        description: `Imported ${imported} new feeds, skipped ${skipped} duplicates${failedCount > 0 ? `, ${failedCount} IDs unresolved` : ""} (${userIds.length} total in file).`,
       });
       fetchFeeds();
     } catch (e: any) {
