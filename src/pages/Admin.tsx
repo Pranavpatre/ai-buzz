@@ -299,10 +299,9 @@ const Admin = () => {
     // Otherwise, redirect to Google OAuth — set flag so we auto-scan on return
     sessionStorage.setItem("pending_gmail_scan", "true");
     const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: `${window.location.origin}/admin`,
+      redirect_uri: window.location.origin,
       extraParams: {
         prompt: "consent",
-        access_type: "offline",
         scope: "https://www.googleapis.com/auth/gmail.readonly",
       },
     });
