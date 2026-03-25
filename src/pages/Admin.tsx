@@ -449,29 +449,6 @@ const Admin = () => {
           )}
         </section>
 
-        {/* Import X Following */}
-        <section className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="font-display text-lg text-foreground">Import X Following</h2>
-            <div>
-              <input
-                ref={xFileInputRef}
-                type="file"
-                accept=".js,.json"
-                className="hidden"
-                onChange={handleImportXFollowing}
-              />
-              <Button variant="outline" size="sm" onClick={() => xFileInputRef.current?.click()} disabled={importingX} className="gap-1.5">
-                {importingX ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-                {importingX ? "Importing…" : "Upload following.js"}
-              </Button>
-            </div>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Go to <span className="font-medium">X → Settings → Your Account → Download an archive</span>, then upload the <code className="bg-muted px-1 rounded">data/following.js</code> file from the zip.
-          </p>
-        </section>
-
         {/* Feeds Table */}
         <section className="space-y-4">
           <h2 className="font-display text-lg text-foreground">Feeds ({feeds.length})</h2>
