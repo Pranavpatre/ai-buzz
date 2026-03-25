@@ -43,9 +43,9 @@ const getInputConfig = (type: string) => {
   switch (type) {
     case "news":
       return {
-        placeholder: "YouTube channel URL or X/Twitter handle (e.g. @elikisd)",
-        hint: "Paste a YouTube channel link or an X/Twitter handle",
-        icons: [Youtube, Twitter],
+        placeholder: "Google News RSS feed URL",
+        hint: "Paste a Google News RSS feed URL",
+        icons: [Newspaper],
       };
     case "podcast":
       return {
