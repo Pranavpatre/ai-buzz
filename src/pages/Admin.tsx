@@ -84,21 +84,30 @@ const Admin = () => {
   // After Google OAuth redirect, detect provider_token via auth state change
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log("[Gmail] Auth state change:", event, "provider_token:", !!session?.provider_token);
       const providerToken = session?.provider_token;
-      if (providerToken && event === "SIGNED_IN") {
+      if (providerToken) {
         setGmailConnected(true);
         const pendingScan = sessionStorage.getItem("pending_gmail_scan");
         if (pendingScan) {
           sessionStorage.removeItem("pending_gmail_scan");
+          console.log("[Gmail] Auto-triggering scan after OAuth redirect");
           runGmailScan(providerToken);
         }
       }
     });
 
-    // Also check current session on mount
+    // Also check current session on mount for pending scan
     supabase.auth.getSession().then(({ data: { session } }) => {
+      console.log("[Gmail] Session check - provider_token:", !!session?.provider_token);
       if (session?.provider_token) {
         setGmailConnected(true);
+        const pendingScan = sessionStorage.getItem("pending_gmail_scan");
+        if (pendingScan) {
+          sessionStorage.removeItem("pending_gmail_scan");
+          console.log("[Gmail] Running pending scan from session");
+          runGmailScan(session.provider_token);
+        }
       }
     });
 
@@ -290,6 +299,7 @@ const Admin = () => {
     // If we already have a provider token, scan directly
     const { data: { session: currentSession } } = await supabase.auth.getSession();
     const providerToken = currentSession?.provider_token;
+    console.log("[Gmail] handleScanGmail - provider_token available:", !!providerToken);
 
     if (providerToken) {
       runGmailScan(providerToken);
@@ -298,16 +308,19 @@ const Admin = () => {
 
     // Otherwise, redirect to Google OAuth — set flag so we auto-scan on return
     sessionStorage.setItem("pending_gmail_scan", "true");
+    console.log("[Gmail] Redirecting to Google OAuth for gmail.readonly scope");
     const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: window.location.origin,
+      redirect_uri: `${window.location.origin}/admin`,
       extraParams: {
         prompt: "consent",
-        scope: "https://www.googleapis.com/auth/gmail.readonly",
+        access_type: "offline",
+        scope: "openid email profile https://www.googleapis.com/auth/gmail.readonly",
       },
     });
 
     if (result.error) {
       sessionStorage.removeItem("pending_gmail_scan");
+      console.error("[Gmail] OAuth error:", result.error);
       toast({ title: "Google sign-in failed", description: String(result.error), variant: "destructive" });
     }
   };
