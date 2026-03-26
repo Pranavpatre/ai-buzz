@@ -117,6 +117,7 @@ const Admin = () => {
   const [scanningGmail, setScanningGmail] = useState(false);
   const [gmailResults, setGmailResults] = useState<{ name: string; domain: string; rss: string | null; sampleSubject: string }[]>([]);
   const [addedGmailDomains, setAddedGmailDomains] = useState<Set<string>>(new Set());
+  const [gmailToken, setGmailToken] = useState<string | null>(null);
 
   // No longer need auth state listener for Gmail — using direct Google OAuth popup
 
@@ -260,9 +261,19 @@ const Admin = () => {
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
-      // Get provider token for Gmail feeds
-      const { data: { session: currentSession } } = await supabase.auth.getSession();
-      const providerToken = currentSession?.provider_token || null;
+      // Check if we have Gmail feeds that need a token
+      const hasGmailFeeds = feeds.some((f) => f.url.startsWith("gmail:"));
+      let providerToken: string | null = gmailToken;
+
+      if (hasGmailFeeds && !providerToken) {
+        try {
+          toast({ title: "Gmail auth needed", description: "A popup will open to refresh Gmail newsletters too" });
+          providerToken = await getGmailTokenViaPopup();
+          setGmailToken(providerToken);
+        } catch {
+          toast({ title: "Skipping Gmail feeds", description: "Refreshing RSS feeds only" });
+        }
+      }
 
       const { data: rssData, error: rssError } = await supabase.functions.invoke("fetch-rss", {
         body: { providerToken },
@@ -270,13 +281,9 @@ const Admin = () => {
       if (rssError) throw rssError;
 
       const items = rssData?.items || [];
-      const hasGmailFeeds = rssData?.hasGmailFeeds || false;
 
       if (items.length === 0) {
-        const msg = hasGmailFeeds && !providerToken
-          ? "No new items found. Gmail newsletters need Google re-auth — click Scan Gmail first."
-          : "No new items found.";
-        toast({ title: "All caught up!", description: msg });
+        toast({ title: "All caught up!", description: "No new items found." });
         setIsRefreshing(false);
         return;
       }
@@ -301,10 +308,17 @@ const Admin = () => {
     }
   };
 
+  const getGmailToken = async (): Promise<string> => {
+    if (gmailToken) return gmailToken;
+    const token = await getGmailTokenViaPopup();
+    setGmailToken(token);
+    return token;
+  };
+
   const handleScanGmail = async () => {
     try {
       toast({ title: "Connecting to Google…", description: "A popup will open for Gmail access" });
-      const token = await getGmailTokenViaPopup();
+      const token = await getGmailToken();
       toast({ title: "Token received", description: "Scanning your Gmail…" });
       runGmailScan(token);
     } catch (e: any) {

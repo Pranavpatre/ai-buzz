@@ -36,9 +36,18 @@ const AI_KEYWORDS = [
   "gpt-4", "gpt-5", "sonnet", "opus", "haiku",
 ];
 
+// Keywords that need word-boundary matching to avoid false positives (e.g. "ai" in "gmail")
+const EXACT_MATCH_KEYWORDS = new Set(["ai", "rag", "mcp"]);
+
 function isAINewsletter(from: string, subject: string): boolean {
   const text = `${from} ${subject}`.toLowerCase();
-  return AI_KEYWORDS.some((kw) => text.includes(kw));
+  return AI_KEYWORDS.some((kw) => {
+    if (EXACT_MATCH_KEYWORDS.has(kw)) {
+      const regex = new RegExp(`\\b${kw}\\b`);
+      return regex.test(text);
+    }
+    return text.includes(kw);
+  });
 }
 
 function extractDomain(email: string): string {
