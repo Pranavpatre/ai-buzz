@@ -117,11 +117,16 @@ const Admin = () => {
   const runGmailScan = async (providerToken: string) => {
     setScanningGmail(true);
     setGmailResults([]);
+    toast({ title: "Gmail scan starting…", description: `Token: ${providerToken.slice(0, 10)}…` });
     try {
       const { data, error } = await supabase.functions.invoke("scan-gmail", {
         body: { providerToken },
       });
-      if (error) throw error;
+      if (error) {
+        toast({ title: "Edge function error", description: JSON.stringify(error).slice(0, 200), variant: "destructive" });
+        throw error;
+      }
+      toast({ title: "Scan response received", description: JSON.stringify(data).slice(0, 200) });
       const newsletters = data?.newsletters || [];
       if (newsletters.length === 0) {
         toast({ title: "No AI newsletters found", description: "We didn't find any AI-related newsletters in your Gmail." });
@@ -130,7 +135,7 @@ const Admin = () => {
       }
       setGmailResults(newsletters);
     } catch (e: any) {
-      toast({ title: "Gmail scan failed", description: e.message, variant: "destructive" });
+      toast({ title: "Gmail scan failed", description: e.message || String(e), variant: "destructive" });
     } finally {
       setScanningGmail(false);
     }
@@ -296,16 +301,20 @@ const Admin = () => {
   };
 
   const handleScanGmail = async () => {
+    toast({ title: "Checking session…", description: "Looking for Google provider token" });
     // If we already have a provider token, scan directly
     const { data: { session: currentSession } } = await supabase.auth.getSession();
     const providerToken = currentSession?.provider_token;
     console.log("[Gmail] handleScanGmail - provider_token available:", !!providerToken);
+    console.log("[Gmail] Full session user:", currentSession?.user?.email);
 
     if (providerToken) {
+      toast({ title: "Token found", description: "Calling scan-gmail edge function…" });
       runGmailScan(providerToken);
       return;
     }
 
+    toast({ title: "No token", description: "Redirecting to Google OAuth…" });
     // Otherwise, redirect to Google OAuth — set flag so we auto-scan on return
     sessionStorage.setItem("pending_gmail_scan", "true");
     console.log("[Gmail] Redirecting to Google OAuth for gmail.readonly scope");
