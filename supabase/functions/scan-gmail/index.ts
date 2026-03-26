@@ -28,6 +28,12 @@ const AI_KEYWORDS = [
   "llm", "gpt", "chatgpt", "claude", "gemini", "openai", "anthropic",
   "neural", "generative", "copilot", "midjourney", "stable diffusion",
   "prompt", "transformer", "diffusion", "embedding",
+  "mistral", "llama", "deepseek", "perplexity", "cursor", "devin",
+  "gen ai", "genai", "ai agent", "agentic", "foundation model",
+  "hugging face", "huggingface", "fine-tuning", "rag",
+  "text-to-image", "text-to-video", "multimodal",
+  "ai tool", "ai startup", "ai research", "ai model",
+  "gpt-4", "gpt-5", "sonnet", "opus", "haiku",
 ];
 
 function isAINewsletter(from: string, subject: string): boolean {
@@ -56,18 +62,19 @@ serve(async (req) => {
       });
     }
 
-    // Search Gmail for newsletter-like emails (unsubscribe header is a strong signal)
+    // Search Gmail broadly — we filter by AI keywords later, so cast a wide net
     const queries = [
+      "newer_than:30d {from:substack.com OR from:beehiiv.com OR from:convertkit.com OR from:mailchimp.com OR from:buttondown.email}",
       "category:promotions newer_than:30d",
-      "unsubscribe AI newer_than:30d",
-      "unsubscribe newsletter artificial intelligence newer_than:30d",
+      "category:updates newer_than:30d",
+      "newer_than:30d subject:(AI OR GPT OR LLM OR Claude OR OpenAI OR Gemini OR \"artificial intelligence\" OR \"machine learning\")",
     ];
 
     const seenDomains = new Set<string>();
     const newsletters: { name: string; domain: string; rss: string | null; sampleSubject: string }[] = [];
 
     for (const q of queries) {
-      const searchUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(q)}&maxResults=50`;
+      const searchUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(q)}&maxResults=100`;
       const searchRes = await fetch(searchUrl, {
         headers: { Authorization: `Bearer ${providerToken}` },
       });
@@ -105,13 +112,16 @@ serve(async (req) => {
           const subject = headers.find((h: any) => h.name === "Subject")?.value || "";
           const hasUnsubscribe = headers.some((h: any) => h.name === "List-Unsubscribe");
 
-          if (!hasUnsubscribe) continue;
-
           const domain = extractDomain(from);
           if (!domain || seenDomains.has(domain)) continue;
 
-          // Check if AI-related
+          // Check if AI-related (hard requirement)
           if (!isAINewsletter(from, subject)) continue;
+
+          // Skip if neither has unsubscribe header nor comes from known newsletter platform
+          const knownPlatforms = ["substack.com", "beehiiv.com", "convertkit.com", "mailchimp.com", "buttondown.email", "ghost.io", "revue.email", "sendinblue.com"];
+          const isFromPlatform = knownPlatforms.some((p) => domain.includes(p) || from.toLowerCase().includes(p));
+          if (!hasUnsubscribe && !isFromPlatform && !KNOWN_NEWSLETTER_RSS[domain]) continue;
 
           seenDomains.add(domain);
 
