@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head><title>Connecting Gmail...</title></head>
+<body>
+<p>Connecting... you can close this window.</p>
+<script>
+  // Google OAuth implicit flow returns token in the URL hash
+  const hash = window.location.hash.substring(1);
+  const params = new URLSearchParams(hash);
+  const accessToken = params.get("access_token");
+  const error = params.get("error");
+
+  if (accessToken) {
+    window.opener.postMessage({ type: "gmail-oauth-token", access_token: accessToken }, window.location.origin);
+  } else {
+    window.opener.postMessage({ type: "gmail-oauth-error", error: error || "No access token received" }, window.location.origin);
+  }
+  window.close();
+</script>
+</body>
+</html>

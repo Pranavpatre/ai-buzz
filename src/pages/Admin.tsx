@@ -5,7 +5,6 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useAdmin } from "@/hooks/useAdmin";
 import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable/index";
 import { Link } from "react-router-dom";
 import {
   Table,
@@ -15,6 +14,45 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+
+const GOOGLE_CLIENT_ID = "482553307228-13rpfhcgr3fps253nicjoi63nrbhi81q.apps.googleusercontent.com";
+
+function getGmailTokenViaPopup(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const redirectUri = window.location.origin + "/oauth-callback.html";
+    const scope = "https://www.googleapis.com/auth/gmail.readonly";
+    const url =
+      `https://accounts.google.com/o/oauth2/v2/auth?` +
+      `client_id=${encodeURIComponent(GOOGLE_CLIENT_ID)}` +
+      `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+      `&response_type=token` +
+      `&scope=${encodeURIComponent(scope)}` +
+      `&prompt=consent`;
+
+    const popup = window.open(url, "gmail-oauth", "width=500,height=600");
+    if (!popup) {
+      reject(new Error("Popup blocked — please allow popups for this site"));
+      return;
+    }
+
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === "gmail-oauth-token" && event.data.access_token) {
+        window.removeEventListener("message", handleMessage);
+        resolve(event.data.access_token);
+      } else if (event.data?.type === "gmail-oauth-error") {
+        window.removeEventListener("message", handleMessage);
+        reject(new Error(event.data.error || "OAuth failed"));
+      }
+    };
+    window.addEventListener("message", handleMessage);
+
+    // Timeout after 2 minutes
+    setTimeout(() => {
+      window.removeEventListener("message", handleMessage);
+      reject(new Error("OAuth timed out"));
+    }, 120000);
+  });
+}
 
 interface Feed {
   id: string;
@@ -79,54 +117,17 @@ const Admin = () => {
   const [scanningGmail, setScanningGmail] = useState(false);
   const [gmailResults, setGmailResults] = useState<{ name: string; domain: string; rss: string | null; sampleSubject: string }[]>([]);
   const [addedGmailDomains, setAddedGmailDomains] = useState<Set<string>>(new Set());
-  const [gmailConnected, setGmailConnected] = useState(false);
 
-  // After Google OAuth redirect, detect provider_token via auth state change
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log("[Gmail] Auth state change:", event, "provider_token:", !!session?.provider_token);
-      const providerToken = session?.provider_token;
-      if (providerToken) {
-        setGmailConnected(true);
-        const pendingScan = sessionStorage.getItem("pending_gmail_scan");
-        if (pendingScan) {
-          sessionStorage.removeItem("pending_gmail_scan");
-          console.log("[Gmail] Auto-triggering scan after OAuth redirect");
-          runGmailScan(providerToken);
-        }
-      }
-    });
-
-    // Also check current session on mount for pending scan
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      console.log("[Gmail] Session check - provider_token:", !!session?.provider_token);
-      if (session?.provider_token) {
-        setGmailConnected(true);
-        const pendingScan = sessionStorage.getItem("pending_gmail_scan");
-        if (pendingScan) {
-          sessionStorage.removeItem("pending_gmail_scan");
-          console.log("[Gmail] Running pending scan from session");
-          runGmailScan(session.provider_token);
-        }
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
+  // No longer need auth state listener for Gmail — using direct Google OAuth popup
 
   const runGmailScan = async (providerToken: string) => {
     setScanningGmail(true);
     setGmailResults([]);
-    toast({ title: "Gmail scan starting…", description: `Token: ${providerToken.slice(0, 10)}…` });
     try {
       const { data, error } = await supabase.functions.invoke("scan-gmail", {
         body: { providerToken },
       });
-      if (error) {
-        toast({ title: "Edge function error", description: JSON.stringify(error).slice(0, 200), variant: "destructive" });
-        throw error;
-      }
-      toast({ title: "Scan response received", description: JSON.stringify(data).slice(0, 200) });
+      if (error) throw error;
       const newsletters = data?.newsletters || [];
       if (newsletters.length === 0) {
         toast({ title: "No AI newsletters found", description: "We didn't find any AI-related newsletters in your Gmail." });
@@ -301,36 +302,13 @@ const Admin = () => {
   };
 
   const handleScanGmail = async () => {
-    toast({ title: "Checking session…", description: "Looking for Google provider token" });
-    // If we already have a provider token, scan directly
-    const { data: { session: currentSession } } = await supabase.auth.getSession();
-    const providerToken = currentSession?.provider_token;
-    console.log("[Gmail] handleScanGmail - provider_token available:", !!providerToken);
-    console.log("[Gmail] Full session user:", currentSession?.user?.email);
-
-    if (providerToken) {
-      toast({ title: "Token found", description: "Calling scan-gmail edge function…" });
-      runGmailScan(providerToken);
-      return;
-    }
-
-    toast({ title: "No token", description: "Redirecting to Google OAuth…" });
-    // Otherwise, redirect to Google OAuth — set flag so we auto-scan on return
-    sessionStorage.setItem("pending_gmail_scan", "true");
-    console.log("[Gmail] Redirecting to Google OAuth for gmail.readonly scope");
-    const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: `${window.location.origin}/admin`,
-      extraParams: {
-        prompt: "consent",
-        access_type: "offline",
-        scope: "openid email profile https://www.googleapis.com/auth/gmail.readonly",
-      },
-    });
-
-    if (result.error) {
-      sessionStorage.removeItem("pending_gmail_scan");
-      console.error("[Gmail] OAuth error:", result.error);
-      toast({ title: "Google sign-in failed", description: String(result.error), variant: "destructive" });
+    try {
+      toast({ title: "Connecting to Google…", description: "A popup will open for Gmail access" });
+      const token = await getGmailTokenViaPopup();
+      toast({ title: "Token received", description: "Scanning your Gmail…" });
+      runGmailScan(token);
+    } catch (e: any) {
+      toast({ title: "Gmail auth failed", description: e.message || String(e), variant: "destructive" });
     }
   };
 

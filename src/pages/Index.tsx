@@ -38,12 +38,7 @@ const Index = () => {
   const { isAdmin } = useAdmin();
   const navigate = useNavigate();
 
-  // If returning from Gmail OAuth, redirect back to admin
-  useEffect(() => {
-    if (sessionStorage.getItem("pending_gmail_scan")) {
-      navigate("/admin", { replace: true });
-    }
-  }, [navigate]);
+  // Gmail OAuth now uses popup — no redirect needed
 
   const fetchDigests = useCallback(async () => {
     if (!user) return;
