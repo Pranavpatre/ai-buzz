@@ -35,7 +35,7 @@ function seededShuffle<T>(arr: T[]): T[] {
   for (let i = 0; i < seed.length; i++) h = ((h << 5) - h + seed.charCodeAt(i)) | 0;
   const result = [...arr];
   for (let i = result.length - 1; i > 0; i--) {
-    h = (h * 16807 + 0) % 2147483647;
+    h = Math.abs((h * 16807) % 2147483647);
     const j = h % (i + 1);
     [result[i], result[j]] = [result[j], result[i]];
   }
