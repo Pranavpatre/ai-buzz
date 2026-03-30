@@ -393,6 +393,7 @@ const Admin = () => {
       { name: "VentureBeat AI", url: "https://venturebeat.com/category/ai/feed/" },
       { name: "MIT Tech Review AI", url: "https://www.technologyreview.com/topic/artificial-intelligence/feed" },
       { name: "Ars Technica AI", url: "https://arstechnica.com/ai/feed/" },
+      { name: "Reuters Technology", url: "https://www.reutersagency.com/feed/?best-topics=tech&post_type=best" },
     ]},
   ];
 
