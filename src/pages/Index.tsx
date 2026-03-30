@@ -65,57 +65,65 @@ const Index = () => {
 
   const fetchDigests = useCallback(async () => {
     if (!user) return;
-    const { data: digestData, error } = await supabase
-      .from("digests")
-      .select("*")
-      .eq("user_id", user.id)
-      .limit(200);
-    if (error) {
-      console.error("Error fetching digests:", error);
-      return;
-    }
-    if (!digestData || digestData.length === 0) {
+    try {
+      const { data: digestData, error } = await supabase
+        .from("digests")
+        .select("*")
+        .eq("user_id", user.id)
+        .limit(200);
+      if (error) {
+        console.error("Error fetching digests:", error);
+        setDigests([]);
+        setLoading(false);
+        return;
+      }
+      if (!digestData || digestData.length === 0) {
+        setDigests([]);
+        setLoading(false);
+        return;
+      }
+
+      const digestIds = digestData.map((d: any) => d.id);
+      const { data: pointsData } = await supabase
+        .from("digest_points").select("*").in("digest_id", digestIds).order("sort_order", { ascending: true });
+
+      // votes table may not exist yet (pre-migration) — query gracefully
+      const votesRes = await supabase.from("votes").select("digest_id, vote").eq("user_id", user.id);
+      const votesData = votesRes.error ? [] : (votesRes.data || []);
+
+      const pointsByDigest: Record<string, { heading: string; detail: string }[]> = {};
+      (pointsData || []).forEach((p: any) => {
+        if (!pointsByDigest[p.digest_id]) pointsByDigest[p.digest_id] = [];
+        pointsByDigest[p.digest_id].push({ heading: p.heading, detail: p.detail });
+      });
+
+      const userVotes = new Map<string, 1 | -1>(
+        (votesData || []).map((v: any) => [v.digest_id, v.vote as 1 | -1])
+      );
+
+      const mapped = digestData.map((d: any) => ({
+        id: d.id,
+        type: d.type as DigestItem["type"],
+        title: d.title,
+        source: d.source,
+        guest: d.guest || undefined,
+        guestBio: d.guest_bio || undefined,
+        author: d.author || undefined,
+        url: d.url,
+        date: d.date,
+        points: pointsByDigest[d.id] || [],
+        quote: d.quote || undefined,
+        voteScore: d.vote_score ?? 0,
+        userVote: userVotes.get(d.id) ?? null,
+      }));
+
+      setDigests(sortDigests(mapped));
+    } catch (e) {
+      console.error("fetchDigests error:", e);
       setDigests([]);
+    } finally {
       setLoading(false);
-      return;
     }
-
-    const digestIds = digestData.map((d: any) => d.id);
-    const { data: pointsData } = await supabase
-      .from("digest_points").select("*").in("digest_id", digestIds).order("sort_order", { ascending: true });
-
-    // votes table may not exist yet (pre-migration) — query gracefully
-    const votesRes = await supabase.from("votes").select("digest_id, vote").eq("user_id", user.id);
-    const votesData = votesRes.error ? [] : (votesRes.data || []);
-
-    const pointsByDigest: Record<string, { heading: string; detail: string }[]> = {};
-    (pointsData || []).forEach((p: any) => {
-      if (!pointsByDigest[p.digest_id]) pointsByDigest[p.digest_id] = [];
-      pointsByDigest[p.digest_id].push({ heading: p.heading, detail: p.detail });
-    });
-
-    const userVotes = new Map<string, 1 | -1>(
-      (votesData || []).map((v: any) => [v.digest_id, v.vote as 1 | -1])
-    );
-
-    const mapped = digestData.map((d: any) => ({
-      id: d.id,
-      type: d.type as DigestItem["type"],
-      title: d.title,
-      source: d.source,
-      guest: d.guest || undefined,
-      guestBio: d.guest_bio || undefined,
-      author: d.author || undefined,
-      url: d.url,
-      date: d.date,
-      points: pointsByDigest[d.id] || [],
-      quote: d.quote || undefined,
-      voteScore: d.vote_score ?? 0,
-      userVote: userVotes.get(d.id) ?? null,
-    }));
-
-    setDigests(sortDigests(mapped));
-    setLoading(false);
   }, [user]);
 
   // Auto-sync: fetch new feed items + summarize on page load (with cooldown)
