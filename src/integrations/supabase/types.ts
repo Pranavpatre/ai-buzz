@@ -61,6 +61,7 @@ export type Database = {
           type: string
           url: string
           user_id: string
+          vote_score: number
         }
         Insert: {
           author?: string | null
@@ -76,6 +77,7 @@ export type Database = {
           type?: string
           url: string
           user_id: string
+          vote_score?: number
         }
         Update: {
           author?: string | null
@@ -91,6 +93,7 @@ export type Database = {
           type?: string
           url?: string
           user_id?: string
+          vote_score?: number
         }
         Relationships: [
           {
@@ -132,6 +135,94 @@ export type Database = {
         }
         Relationships: []
       }
+      votes: {
+        Row: {
+          id: string
+          user_id: string
+          digest_id: string
+          vote: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          digest_id: string
+          vote: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          digest_id?: string
+          vote?: number
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "votes_digest_id_fkey"
+            columns: ["digest_id"]
+            isOneToOne: false
+            referencedRelation: "digests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      feed_scores: {
+        Row: {
+          id: string
+          user_id: string
+          feed_id: string
+          upvotes: number
+          downvotes: number
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          feed_id: string
+          upvotes?: number
+          downvotes?: number
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          feed_id?: string
+          upvotes?: number
+          downvotes?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "feed_scores_feed_id_fkey"
+            columns: ["feed_id"]
+            isOneToOne: false
+            referencedRelation: "feeds"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_preferences: {
+        Row: {
+          id: string
+          user_id: string
+          weekly_digest: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          weekly_digest?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          weekly_digest?: boolean
+          created_at?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           id: string
@@ -161,6 +252,14 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      cast_vote: {
+        Args: {
+          p_user_id: string
+          p_digest_id: string
+          p_vote: number
+        }
+        Returns: undefined
       }
     }
     Enums: {

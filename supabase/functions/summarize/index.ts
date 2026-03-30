@@ -94,6 +94,25 @@ Return ONLY valid JSON:
       summary = { points: [{ heading: "Summary", detail: content.slice(0, 500) }] };
     }
 
+    // Reject garbage summaries — Claude admitting it can't summarize
+    const GARBAGE_PHRASES = [
+      "i need to be transparent", "doesn't contain specific", "i would need",
+      "not enough information", "unable to summarize", "cannot provide",
+      "no specific details", "promotional material", "i appreciate you sharing",
+      "without more context", "insufficient information", "channel introduction",
+    ];
+    const allText = JSON.stringify(summary).toLowerCase();
+    const isGarbage = GARBAGE_PHRASES.some((p) => allText.includes(p))
+      || !summary.points || summary.points.length === 0
+      || (summary.points.length === 1 && summary.points[0].heading === "Summary")
+      || summary.points.reduce((acc: number, p: any) => acc + (p.detail?.length || 0), 0) < 50;
+    if (isGarbage) {
+      console.log(`Skipped garbage summary: ${item.title}`);
+      return new Response(JSON.stringify({ skipped: true, reason: "insufficient_content" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // Validate topic: reject editorial/vague topics, fall back to original title
     const topic = summary.topic || "";
     const isBadTopic = !topic

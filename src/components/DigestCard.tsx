@@ -1,6 +1,7 @@
-import { Mic, FileText, Newspaper, BookOpen, ExternalLink, ChevronDown } from "lucide-react";
+import { Mic, FileText, Newspaper, BookOpen, ExternalLink, ChevronDown, ArrowBigUp, ArrowBigDown } from "lucide-react";
 
 interface DigestCardProps {
+  id: string;
   type: "podcast" | "news" | "article";
   title: string;
   source: string;
@@ -11,6 +12,9 @@ interface DigestCardProps {
   date: string;
   points: { heading: string; detail: string }[];
   quote?: string;
+  voteScore: number;
+  userVote: 1 | -1 | null;
+  onVote: (digestId: string, vote: 1 | -1) => void;
 }
 
 const typeMeta = {
@@ -20,6 +24,7 @@ const typeMeta = {
 };
 
 const DigestCard = ({
+  id,
   type,
   title,
   source,
@@ -30,6 +35,9 @@ const DigestCard = ({
   date,
   points,
   quote,
+  voteScore,
+  userVote,
+  onVote,
 }: DigestCardProps) => {
   const meta = typeMeta[type];
   const Icon = meta.icon;
@@ -103,6 +111,38 @@ const DigestCard = ({
         >
           {type === "podcast" ? "Listen" : "Read"}{" "}<ExternalLink className="h-3.5 w-3.5" />
         </a>
+
+        {/* Vote buttons */}
+        <div className="flex items-center gap-0.5">
+          <button
+            onClick={() => onVote(id, 1)}
+            className={`p-1.5 rounded-md transition-colors ${
+              userVote === 1
+                ? "text-primary bg-primary/10"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted"
+            }`}
+            aria-label="Upvote"
+          >
+            <ArrowBigUp className={`h-5 w-5 ${userVote === 1 ? "fill-primary" : ""}`} />
+          </button>
+          <span className={`text-sm font-medium min-w-[1.5rem] text-center ${
+            voteScore > 0 ? "text-primary" : voteScore < 0 ? "text-destructive" : "text-muted-foreground"
+          }`}>
+            {voteScore}
+          </span>
+          <button
+            onClick={() => onVote(id, -1)}
+            className={`p-1.5 rounded-md transition-colors ${
+              userVote === -1
+                ? "text-destructive bg-destructive/10"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted"
+            }`}
+            aria-label="Downvote"
+          >
+            <ArrowBigDown className={`h-5 w-5 ${userVote === -1 ? "fill-destructive" : ""}`} />
+          </button>
+        </div>
+
         <div className="flex items-center gap-1 text-[10px] sm:text-xs text-muted-foreground animate-bounce">
           <ChevronDown className="h-3.5 w-3.5" />
           Scroll

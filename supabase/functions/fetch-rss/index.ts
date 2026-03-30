@@ -168,12 +168,13 @@ serve(async (req) => {
       });
     }
 
-    const { data: existingDigests } = await supabase
-      .from("digests")
-      .select("url, title")
-      .eq("user_id", userId);
+    const [{ data: existingDigests }, { data: feedScores }] = await Promise.all([
+      supabase.from("digests").select("url, title").eq("user_id", userId),
+      supabase.from("feed_scores").select("feed_id, upvotes, downvotes").eq("user_id", userId),
+    ]);
     const existingUrls = new Set((existingDigests || []).map((d: any) => d.url));
     const existingTitles = (existingDigests || []).map((d: any) => normalizeTitle(d.title));
+    const scoreMap = new Map((feedScores || []).map((s: any) => [s.feed_id, s]));
 
     // 1-month lookback window
     const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
@@ -201,9 +202,18 @@ serve(async (req) => {
           || feed.url.includes("technologyreview.com/topic/artificial-intelligence")
           || feed.url.includes("arstechnica.com/ai")
           || feed.name?.toLowerCase().includes("ai");
+
+        // Adjust per-feed limit based on user vote history
+        const fs = scoreMap.get(feed.id) as any;
+        let maxItems = 30;
+        if (fs) {
+          const total = fs.upvotes + fs.downvotes;
+          if (total >= 5 && fs.upvotes / total < 0.2) maxItems = 5;
+          else if (fs.upvotes >= 3 && fs.upvotes / total > 0.7) maxItems = 50;
+        }
         let added = 0;
         for (const item of items) {
-          if (added >= 30) break;
+          if (added >= maxItems) break;
           if (!item.link || item.link.length < 10) continue;
           if (existingUrls.has(item.link)) continue;
           const pubDate = item.pubDate ? new Date(item.pubDate) : new Date();

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Zap, LogOut, Shield, Filter, RefreshCw } from "lucide-react";
+import { Zap, LogOut, Shield, RefreshCw, Settings, Mail } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import DigestCard from "@/components/DigestCard";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import { useAdmin } from "@/hooks/useAdmin";
 import { supabase } from "@/integrations/supabase/client";
 
 interface DigestItem {
-  id?: string;
+  id: string;
   type: "podcast" | "news" | "article";
   title: string;
   source: string;
@@ -20,11 +20,34 @@ interface DigestItem {
   date: string;
   points: { heading: string; detail: string }[];
   quote?: string;
+  voteScore: number;
+  userVote: 1 | -1 | null;
 }
 
 type FilterType = "all" | "news" | "podcast" | "article";
 
 const REFRESH_COOLDOWN_MS = 15 * 60 * 1000; // 15 minutes
+
+// Seeded shuffle — stable within same day
+function seededShuffle<T>(arr: T[]): T[] {
+  const seed = new Date().toDateString();
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = ((h << 5) - h + seed.charCodeAt(i)) | 0;
+  const result = [...arr];
+  for (let i = result.length - 1; i > 0; i--) {
+    h = (h * 16807 + 0) % 2147483647;
+    const j = h % (i + 1);
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
+function sortDigests(items: DigestItem[]): DigestItem[] {
+  const upvoted = items.filter((d) => d.voteScore > 0).sort((a, b) => b.voteScore - a.voteScore);
+  const neutral = seededShuffle(items.filter((d) => d.voteScore === 0));
+  const downvoted = items.filter((d) => d.voteScore < 0).sort((a, b) => a.voteScore - b.voteScore);
+  return [...upvoted, ...neutral, ...downvoted];
+}
 
 const Index = () => {
   const [digests, setDigests] = useState<DigestItem[]>([]);
@@ -32,13 +55,13 @@ const Index = () => {
   const [syncing, setSyncing] = useState(false);
   const [filter, setFilter] = useState<FilterType>("all");
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [showSettings, setShowSettings] = useState(false);
+  const [weeklyDigest, setWeeklyDigest] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const { user, signOut } = useAuth();
   const { isAdmin } = useAdmin();
   const navigate = useNavigate();
-
-  // Gmail OAuth now uses popup — no redirect needed
 
   const fetchDigests = useCallback(async () => {
     if (!user) return;
@@ -46,7 +69,6 @@ const Index = () => {
       .from("digests")
       .select("*")
       .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
       .limit(200);
     if (error) {
       console.error("Error fetching digests:", error);
@@ -59,11 +81,10 @@ const Index = () => {
     }
 
     const digestIds = digestData.map((d: any) => d.id);
-    const { data: pointsData } = await supabase
-      .from("digest_points")
-      .select("*")
-      .in("digest_id", digestIds)
-      .order("sort_order", { ascending: true });
+    const [{ data: pointsData }, { data: votesData }] = await Promise.all([
+      supabase.from("digest_points").select("*").in("digest_id", digestIds).order("sort_order", { ascending: true }),
+      supabase.from("votes").select("digest_id, vote").eq("user_id", user.id),
+    ]);
 
     const pointsByDigest: Record<string, { heading: string; detail: string }[]> = {};
     (pointsData || []).forEach((p: any) => {
@@ -71,21 +92,27 @@ const Index = () => {
       pointsByDigest[p.digest_id].push({ heading: p.heading, detail: p.detail });
     });
 
-    setDigests(
-      digestData.map((d: any) => ({
-        id: d.id,
-        type: d.type as DigestItem["type"],
-        title: d.title,
-        source: d.source,
-        guest: d.guest || undefined,
-        guestBio: d.guest_bio || undefined,
-        author: d.author || undefined,
-        url: d.url,
-        date: d.date,
-        points: pointsByDigest[d.id] || [],
-        quote: d.quote || undefined,
-      }))
+    const userVotes = new Map<string, 1 | -1>(
+      (votesData || []).map((v: any) => [v.digest_id, v.vote as 1 | -1])
     );
+
+    const mapped = digestData.map((d: any) => ({
+      id: d.id,
+      type: d.type as DigestItem["type"],
+      title: d.title,
+      source: d.source,
+      guest: d.guest || undefined,
+      guestBio: d.guest_bio || undefined,
+      author: d.author || undefined,
+      url: d.url,
+      date: d.date,
+      points: pointsByDigest[d.id] || [],
+      quote: d.quote || undefined,
+      voteScore: d.vote_score ?? 0,
+      userVote: userVotes.get(d.id) ?? null,
+    }));
+
+    setDigests(sortDigests(mapped));
     setLoading(false);
   }, [user]);
 
@@ -128,6 +155,37 @@ const Index = () => {
   useEffect(() => {
     fetchDigests().then(() => autoSync());
   }, [fetchDigests, autoSync]);
+
+  // Load email preferences
+  useEffect(() => {
+    if (!user) return;
+    supabase.from("email_preferences").select("weekly_digest").eq("user_id", user.id).single()
+      .then(({ data }) => { if (data) setWeeklyDigest(data.weekly_digest); });
+  }, [user]);
+
+  const handleVote = useCallback(async (digestId: string, vote: 1 | -1) => {
+    if (!user) return;
+    // Optimistic update
+    setDigests((prev) => {
+      const updated = prev.map((d) => {
+        if (d.id !== digestId) return d;
+        const oldVote = d.userVote;
+        if (oldVote === vote) return { ...d, userVote: null as 1 | -1 | null, voteScore: d.voteScore - vote };
+        if (oldVote) return { ...d, userVote: vote, voteScore: d.voteScore + 2 * vote };
+        return { ...d, userVote: vote, voteScore: d.voteScore + vote };
+      });
+      return sortDigests(updated);
+    });
+    await supabase.rpc("cast_vote", { p_user_id: user.id, p_digest_id: digestId, p_vote: vote });
+  }, [user]);
+
+  const toggleWeeklyDigest = useCallback(async () => {
+    if (!user) return;
+    const newVal = !weeklyDigest;
+    setWeeklyDigest(newVal);
+    await supabase.from("email_preferences").upsert({ user_id: user.id, weekly_digest: newVal }, { onConflict: "user_id" });
+    toast({ title: newVal ? "Weekly digest enabled" : "Weekly digest disabled" });
+  }, [user, weeklyDigest, toast]);
 
   const filtered = filter === "all" ? digests : digests.filter((d) => d.type === filter);
 
@@ -191,12 +249,33 @@ const Index = () => {
                 <Shield className="h-4 w-4" />
               </Button>
             )}
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setShowSettings(!showSettings)} title="Settings">
+              <Settings className="h-4 w-4" />
+            </Button>
             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={signOut} title="Sign out">
               <LogOut className="h-4 w-4" />
             </Button>
           </div>
         </div>
       </header>
+
+      {/* Settings panel */}
+      {showSettings && (
+        <div className="border-b border-border bg-card px-4 py-3 flex-shrink-0 z-10">
+          <div className="flex items-center justify-between max-w-2xl mx-auto">
+            <div className="flex items-center gap-2">
+              <Mail className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm text-foreground">Weekly top stories email</span>
+            </div>
+            <button
+              onClick={toggleWeeklyDigest}
+              className={`relative w-10 h-5 rounded-full transition-colors ${weeklyDigest ? "bg-primary" : "bg-muted"}`}
+            >
+              <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${weeklyDigest ? "translate-x-5" : ""}`} />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Snap-scroll container */}
       <div
@@ -231,7 +310,7 @@ const Index = () => {
             className="snap-start snap-always"
             style={{ height: "calc(100dvh - 90px)" }}
           >
-            <DigestCard {...d} />
+            <DigestCard {...d} onVote={handleVote} />
           </div>
         ))}
 
