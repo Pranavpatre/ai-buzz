@@ -233,6 +233,13 @@ const Admin = () => {
         sourceType = "youtube";
       }
 
+      const duplicate = feeds.find((f) => f.url === finalUrl);
+      if (duplicate) {
+        toast({ title: "Already added", description: `"${duplicate.name}" is already in your feeds.`, variant: "destructive" });
+        setAddingFeed(false);
+        return;
+      }
+
       const { error } = await supabase.from("feeds").insert({
         name: feedName,
         url: finalUrl,

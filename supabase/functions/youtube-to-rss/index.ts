@@ -5,27 +5,43 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-function extractChannelIdFromHtml(html: string): string | null {
-  // Try multiple patterns to find channel ID
-  const patterns = [
-    /\"channelId\":\"(UC[a-zA-Z0-9_-]{22})\"/,
-    /channel_id=(UC[a-zA-Z0-9_-]{22})/,
-    /\"externalId\":\"(UC[a-zA-Z0-9_-]{22})\"/,
-    /data-channel-external-id=\"(UC[a-zA-Z0-9_-]{22})\"/,
-    /\/channel\/(UC[a-zA-Z0-9_-]{22})/,
-  ];
-  for (const pattern of patterns) {
-    const match = html.match(pattern);
-    if (match) return match[1];
-  }
-  return null;
+function extractChannelIdFromUrl(url: string): string | null {
+  const match = url.match(/youtube\.com\/channel\/(UC[a-zA-Z0-9_-]{22})/);
+  return match ? match[1] : null;
 }
 
-function extractChannelIdFromUrl(url: string): string | null {
-  // Direct channel URL: youtube.com/channel/UCxxxxxx
-  const channelMatch = url.match(/youtube\.com\/channel\/(UC[a-zA-Z0-9_-]{22})/);
-  if (channelMatch) return channelMatch[1];
-  return null;
+function extractHandleFromUrl(url: string): string | null {
+  // youtube.com/@handle
+  const match = url.match(/youtube\.com\/@([a-zA-Z0-9_.-]+)/);
+  return match ? match[1] : null;
+}
+
+function extractUsernameFromUrl(url: string): string | null {
+  // youtube.com/user/username
+  const match = url.match(/youtube\.com\/user\/([a-zA-Z0-9_.-]+)/);
+  return match ? match[1] : null;
+}
+
+function extractCustomNameFromUrl(url: string): string | null {
+  // youtube.com/c/name
+  const match = url.match(/youtube\.com\/c\/([a-zA-Z0-9_.-]+)/);
+  return match ? match[1] : null;
+}
+
+async function resolveViaApi(params: Record<string, string>, apiKey: string): Promise<string | null> {
+  const qs = new URLSearchParams({ part: "id", key: apiKey, ...params });
+  const res = await fetch(`https://www.googleapis.com/youtube/v3/channels?${qs}`);
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data.items?.[0]?.id ?? null;
+}
+
+async function resolveViaSearch(query: string, apiKey: string): Promise<string | null> {
+  const qs = new URLSearchParams({ part: "snippet", type: "channel", q: query, maxResults: "1", key: apiKey });
+  const res = await fetch(`https://www.googleapis.com/youtube/v3/search?${qs}`);
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data.items?.[0]?.id?.channelId ?? null;
 }
 
 serve(async (req) => {
@@ -39,42 +55,47 @@ serve(async (req) => {
       });
     }
 
-    // Normalize URL
+    const YOUTUBE_API_KEY = Deno.env.get("YOUTUBE_API_KEY");
+    if (!YOUTUBE_API_KEY) {
+      return new Response(JSON.stringify({ error: "YOUTUBE_API_KEY not configured" }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     let url = youtubeUrl.trim();
     if (!url.startsWith("http")) url = "https://" + url;
 
-    // Try extracting channel ID directly from URL
-    let channelId = extractChannelIdFromUrl(url);
+    let channelId: string | null = null;
 
+    // 1. Direct /channel/UCxxxxxx URL — no API call needed
+    channelId = extractChannelIdFromUrl(url);
+
+    // 2. @handle URL → forHandle API
     if (!channelId) {
-      // Fetch the YouTube page and extract channel ID from HTML
-      const res = await fetch(url, {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          "Accept-Language": "en-US,en;q=0.9",
-        },
-        redirect: "follow",
-        signal: AbortSignal.timeout(15000),
-      });
+      const handle = extractHandleFromUrl(url);
+      if (handle) channelId = await resolveViaApi({ forHandle: handle }, YOUTUBE_API_KEY);
+    }
 
-      if (!res.ok) {
-        return new Response(JSON.stringify({ error: `Failed to fetch YouTube page (${res.status})` }), {
-          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
+    // 3. /user/username URL → forUsername API
+    if (!channelId) {
+      const username = extractUsernameFromUrl(url);
+      if (username) channelId = await resolveViaApi({ forUsername: username }, YOUTUBE_API_KEY);
+    }
 
-      const html = await res.text();
-      channelId = extractChannelIdFromHtml(html);
+    // 4. /c/name URL → search API
+    if (!channelId) {
+      const customName = extractCustomNameFromUrl(url);
+      if (customName) channelId = await resolveViaSearch(customName, YOUTUBE_API_KEY);
     }
 
     if (!channelId) {
-      return new Response(JSON.stringify({ error: "Could not extract channel ID from that URL. Try a channel URL like youtube.com/@channelname" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ error: "Could not find a YouTube channel for that URL. Try a URL like youtube.com/@channelname" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     const rssUrl = `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`;
-
     return new Response(JSON.stringify({ rssUrl, channelId }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
