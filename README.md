@@ -1,73 +1,85 @@
-# Welcome to your Lovable project
+# AI Buzz
 
-## Project info
+AI Buzz is a daily AI briefing app — think Inshorts, but for AI. It pulls content from 40+ sources across news, podcasts, and articles, summarizes each item into a full-screen card with 3–5 key bullet points using Claude AI, and presents them in a fast vertical snap-scroll. One place, one scroll, fully caught up.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## Features
 
-## How can I edit this code?
+- **Snap-scroll digest feed** — Full-screen cards, one per item. Swipe to read next.
+- **Filter tabs** — All / News / Podcasts / Articles
+- **Auto-sync** — Fetches and summarizes new content on page load (15-min cooldown)
+- **Source links** — Every card links to the original article, video, or paper
+- **Admin panel** — Manage RSS feeds, YouTube channels, and Gmail newsletters
 
-There are several ways of editing your application.
+## Content Sources
 
-**Use Lovable**
+| Type | Sources |
+|------|---------|
+| **News** | Google News AI, TechCrunch AI, VentureBeat AI, MIT Tech Review AI, Ars Technica AI |
+| **Podcasts** | 25 YouTube channels — Lex Fridman, All-In, No Priors, Fireship, OpenAI, Anthropic, Google DeepMind, and more |
+| **Articles** | Simon Willison, Ethan Mollick (One Useful Thing), ArXiv (cs.AI/cs.LG/cs.CL), Reddit (r/MachineLearning, r/LocalLLaMA), Hacker News AI |
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+## Summarization Pipeline
 
-Changes made via Lovable will be committed automatically to this repo.
+```
+Feeds (RSS / YouTube / Gmail)
+    ↓
+fetch-rss (Supabase Edge Function)
+    → Fetch XML from all active feeds
+    → Filter by 140+ AI keywords
+    → Deduplicate against existing digests
+    ↓
+summarize (Supabase Edge Function)
+    → Claude Haiku (Anthropic API)
+    → Generates headline + 3–5 bullet points
+    → Parallel batches of 5
+    ↓
+React snap-scroll feed
+    → Up to 200 digests
+    → Filter by type
+    → Link to original source
+```
 
-**Use your preferred IDE**
+## Tech Stack
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+| Layer | Technology |
+|-------|-----------|
+| Frontend | React 18 + TypeScript + Vite |
+| UI | shadcn/ui + Tailwind CSS |
+| Database | Supabase (PostgreSQL) |
+| Auth | Supabase Auth |
+| Edge Functions | Deno (Supabase Edge Functions) |
+| AI | Claude Haiku (Anthropic API) |
+| APIs | YouTube Data API v3, Gmail API |
+| Hosting | Vercel |
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+## Getting Started
 
-Follow these steps:
+```bash
+# Clone the repo
+git clone https://github.com/Pranavpatre/ai-buzz.git
+cd ai-buzz
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+# Install dependencies
+npm install
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Start the dev server
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+### Environment Variables
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+Set the following as Supabase secrets:
 
-**Use GitHub Codespaces**
+```
+ANTHROPIC_API_KEY   # Required for the summarize edge function
+YOUTUBE_API_KEY     # Required for YouTube channel discovery
+```
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## Scripts
 
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+```bash
+npm run dev        # Start dev server
+npm run build      # Production build
+npm run lint       # ESLint
+npm run test       # Run tests (Vitest)
+```
