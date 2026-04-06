@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { LogOut, Shield, Settings, Mail } from "lucide-react";
+import { LogOut, Shield, Settings, Mail, Zap } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import DigestCard from "@/components/DigestCard";
 import { Button } from "@/components/ui/button";
