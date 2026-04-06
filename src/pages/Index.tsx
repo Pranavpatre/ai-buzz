@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Zap, LogOut, Shield, Settings, Mail } from "lucide-react";
+import { LogOut, Shield, Settings, Mail } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import DigestCard from "@/components/DigestCard";
 import { Button } from "@/components/ui/button";
@@ -180,9 +180,8 @@ const Index = () => {
       {/* Compact header */}
       <header className="border-b border-border bg-surface-elevated flex-shrink-0 z-10">
         <div className="px-3 py-2.5 sm:px-4 sm:py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Zap className="h-5 w-5 text-primary" />
-            <span className="font-display text-lg text-foreground">AI Buzz</span>
+          <div className="flex items-center">
+            <img src="/logo.png" alt="AI Buzz" className="h-10" />
           </div>
           <div className="flex items-center gap-1">
             {/* Filter pills — always visible */}
