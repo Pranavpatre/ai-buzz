@@ -12,9 +12,9 @@ serve(async (req) => {
     const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
     if (!RESEND_API_KEY) throw new Error("RESEND_API_KEY not configured");
 
-    // Get top 5 digests by vote_score from the past 7 days
+    // Get top upvoted digests from the past 7 days
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-    const { data: topDigests, error: digestError } = await supabase
+    const { data: upvoted, error: upvotedError } = await supabase
       .from("digests")
       .select("id, title, source, url, type, vote_score, quote")
       .gte("created_at", weekAgo)
@@ -22,9 +22,30 @@ serve(async (req) => {
       .order("vote_score", { ascending: false })
       .limit(5);
 
-    if (digestError) throw digestError;
-    if (!topDigests || topDigests.length === 0) {
-      return new Response(JSON.stringify({ sent: 0, reason: "no_upvoted_content" }), {
+    if (upvotedError) throw upvotedError;
+
+    let topDigests: any[] = upvoted || [];
+
+    // If fewer than 5 upvoted, fill remaining slots with random recent articles
+    if (topDigests.length < 5) {
+      const exclude = topDigests.map((d: any) => d.id);
+      const needed = 5 - topDigests.length;
+      let query = supabase
+        .from("digests")
+        .select("id, title, source, url, type, vote_score, quote")
+        .order("created_at", { ascending: false })
+        .limit(needed + 20); // fetch extra to allow random selection
+      if (exclude.length > 0) query = query.not("id", "in", `(${exclude.join(",")})`);
+      const { data: recent } = await query;
+      if (recent && recent.length > 0) {
+        // shuffle and take what we need
+        const shuffled = recent.sort(() => Math.random() - 0.5).slice(0, needed);
+        topDigests = [...topDigests, ...shuffled];
+      }
+    }
+
+    if (topDigests.length === 0) {
+      return new Response(JSON.stringify({ sent: 0, reason: "no_content" }), {
         headers: { "Content-Type": "application/json" },
       });
     }
